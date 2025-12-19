@@ -8,11 +8,20 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS for your frontend
+// FIXED: Enable CORS specifically for your Vercel frontend
 app.use(cors({
-  origin: '*', // In production, specify your frontend domain
-  methods: ['GET', 'POST', 'OPTIONS']
+  origin: [
+    'https://report-dashboard-flame.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 app.use(express.json({ limit: '10mb' })); // Accept large payloads
 
@@ -67,6 +76,7 @@ async function saveCampaignData(data) {
 app.get('/api/campaigns', async (req, res) => {
   try {
     console.log('📥 GET /api/campaigns - Fetching all campaign data');
+    console.log('📍 Request from:', req.headers.origin || 'unknown');
     
     // Check cache
     const now = Date.now();
@@ -118,6 +128,7 @@ app.get('/api/campaigns/reports/:reportId', async (req, res) => {
 app.post('/api/campaigns/update', async (req, res) => {
   try {
     console.log('📤 POST /api/campaigns/update - Receiving data update');
+    console.log('📍 Request from:', req.headers.origin || 'unknown');
     
     const newData = req.body;
     
@@ -125,7 +136,8 @@ app.post('/api/campaigns/update', async (req, res) => {
     if (!newData || !newData.reports || !Array.isArray(newData.reports)) {
       return res.status(400).json({ 
         error: 'Invalid data structure',
-        expected: '{ reports: [...] }' 
+        expected: '{ reports: [...] }',
+        received: typeof newData
       });
     }
     
@@ -234,7 +246,12 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     cache: {
       exists: !!campaignCache,
-      age: lastCacheUpdate ? Date.now() - lastCacheUpdate : null
+      age: lastCacheUpdate ? Date.now() - lastCacheUpdate : null,
+      reports: campaignCache?.reports?.length || 0
+    },
+    environment: {
+      nodeVersion: process.version,
+      platform: process.platform
     }
   });
 });
@@ -244,6 +261,7 @@ app.get('/api', (req, res) => {
   res.json({
     name: 'Campaign Architecture API',
     version: '1.0.0',
+    frontend: 'https://report-dashboard-flame.vercel.app',
     endpoints: {
       get: {
         '/api/campaigns': 'Get all campaign data',
@@ -256,7 +274,24 @@ app.get('/api', (req, res) => {
         '/api/campaigns/refresh': 'Refresh cache manually'
       }
     },
-    documentation: 'See API_USAGE.md for examples'
+    cors: {
+      allowedOrigins: [
+        'https://report-dashboard-flame.vercel.app',
+        'http://localhost:3000',
+        'http://localhost:5173'
+      ]
+    }
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Campaign Architecture API',
+    status: 'running',
+    frontend: 'https://report-dashboard-flame.vercel.app',
+    apiDocs: '/api',
+    health: '/health'
   });
 });
 
@@ -264,10 +299,13 @@ app.get('/api', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ 
     error: 'Endpoint not found',
+    path: req.path,
+    method: req.method,
     available: [
       'GET /api/campaigns',
       'POST /api/campaigns/update',
-      'GET /health'
+      'GET /health',
+      'GET /api'
     ]
   });
 });
@@ -278,14 +316,18 @@ app.listen(PORT, async () => {
   console.log('🚀 Campaign Architecture API Server');
   console.log('=====================================');
   console.log(`📡 Server running on: http://localhost:${PORT}`);
+  console.log(`🌍 Public URL: https://report-dashboard-backend-srve.onrender.com`);
   console.log(`📋 API Info: http://localhost:${PORT}/api`);
   console.log(`❤️  Health check: http://localhost:${PORT}/health`);
   console.log('');
-  console.log('📥 Frontend GET endpoint:');
-  console.log(`   http://localhost:${PORT}/api/campaigns`);
+  console.log('🎨 Frontend URL:');
+  console.log(`   https://report-dashboard-flame.vercel.app`);
   console.log('');
-  console.log('📤 n8n/Zapier/Make POST endpoint:');
-  console.log(`   http://localhost:${PORT}/api/campaigns/update`);
+  console.log('📥 Frontend GET endpoint:');
+  console.log(`   GET /api/campaigns`);
+  console.log('');
+  console.log('📤 Make.com/n8n POST endpoint:');
+  console.log(`   POST /api/campaigns/update`);
   console.log('');
   console.log('✅ Ready to receive requests!');
   console.log('=====================================');
